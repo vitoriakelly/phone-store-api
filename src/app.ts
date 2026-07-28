@@ -1,11 +1,13 @@
 import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
-import { saleModule } from './modules/sale.module.js';
+
 import { prisma } from './config/prisma.js';
 import { swaggerDocument } from './config/swagger.js';
 import { errorHandler } from './middlewares/error-handler.js';
 import { deviceModule } from './modules/device.module.js';
+import { reportModule } from './modules/report.module.js';
+import { saleModule } from './modules/sale.module.js';
 
 const app = express();
 
@@ -45,13 +47,16 @@ app.use(
 );
 
 app.get('/api-docs.json', (_request, response) => {
-  return response.status(200).json(swaggerDocument);
+  return response
+    .status(200)
+    .json(swaggerDocument);
 });
 
 app.get('/health', (_request, response) => {
   return response.status(200).json({
     status: 'ok',
-    message: 'Phone Store API está funcionando.',
+    message:
+      'Phone Store API está funcionando.',
     timestamp: new Date().toISOString(),
   });
 });
@@ -95,6 +100,7 @@ app.get(
 
 app.use(deviceModule);
 app.use(saleModule);
+app.use(reportModule);
 
 app.use((_request, response) => {
   return response.status(404).json({
