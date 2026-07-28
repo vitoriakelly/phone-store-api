@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: phone-store-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: phone_store
+      POSTGRES_PASSWORD: phone_store_password
+      POSTGRES_DB: phone_store
+
+    ports:
+      - '5433:5432'
+
+    volumes:
+      - phone_store_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U phone_store -d phone_store',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  phone_store_postgres_data:
