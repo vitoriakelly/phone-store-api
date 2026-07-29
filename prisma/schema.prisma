@@ -8,6 +8,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  MASTER
+  FUNCIONARIO
+}
+
 enum DeviceStatus {
   DISPONIVEL
   RESERVADO
@@ -27,6 +32,22 @@ enum PaymentMethod {
   CARTAO_DEBITO
   TRANSFERENCIA
   OUTRO
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String    @db.VarChar(160)
+  email        String    @unique @db.VarChar(160)
+  passwordHash String    @db.VarChar(255)
+  role         UserRole  @default(FUNCIONARIO)
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([role])
+  @@index([active])
+  @@map("users")
 }
 
 model Device {
