@@ -135,8 +135,36 @@ function mapSale(
       sale.purchasePrice,
     ),
 
+    grossSalePrice:
+      sale.grossSalePrice === null
+        ? Number(sale.salePrice) +
+          Number(
+            sale.discountAmount,
+          )
+        : Number(
+            sale.grossSalePrice,
+          ),
+
+    discountAmount: Number(
+      sale.discountAmount,
+    ),
+
     salePrice: Number(
       sale.salePrice,
+    ),
+
+    commissionType:
+      sale.commissionType,
+
+    commissionValue:
+      sale.commissionValue === null
+        ? null
+        : Number(
+            sale.commissionValue,
+          ),
+
+    commissionAmount: Number(
+      sale.commissionAmount,
     ),
 
     customerName: sale.customerName,
@@ -193,6 +221,139 @@ function mapSale(
   };
 }
 
+function calculateSaleFinancials(
+  data: CreateSaleDTO,
+) {
+  const grossSalePriceInCents =
+    convertToCents(
+      data.salePrice,
+    );
+
+  const discountAmountInCents =
+    convertToCents(
+      data.discountAmount,
+    );
+
+  if (discountAmountInCents < 0) {
+    throw new AppError(
+      'O desconto não pode ser negativo.',
+      400,
+    );
+  }
+
+  if (
+    discountAmountInCents >=
+    grossSalePriceInCents
+  ) {
+    throw new AppError(
+      'O desconto deve ser menor que o valor da venda.',
+      400,
+    );
+  }
+
+  const finalSalePriceInCents =
+    grossSalePriceInCents -
+    discountAmountInCents;
+
+  let commissionAmountInCents = 0;
+
+  if (
+    data.commissionType &&
+    data.commissionValue ===
+      undefined
+  ) {
+    throw new AppError(
+      'Informe o percentual ou o valor fixo da comissão.',
+      400,
+    );
+  }
+
+  if (
+    !data.commissionType &&
+    data.commissionValue !==
+      undefined
+  ) {
+    throw new AppError(
+      'Selecione o tipo da comissão.',
+      400,
+    );
+  }
+
+  if (
+    data.commissionType &&
+    data.commissionValue !==
+      undefined
+  ) {
+    if (
+      data.commissionValue <= 0
+    ) {
+      throw new AppError(
+        'O valor da comissão deve ser maior que zero.',
+        400,
+      );
+    }
+
+    if (
+      data.commissionType ===
+      'PERCENTAGE'
+    ) {
+      if (
+        data.commissionValue > 100
+      ) {
+        throw new AppError(
+          'O percentual da comissão não pode ser maior que 100%.',
+          400,
+        );
+      }
+
+      commissionAmountInCents =
+        Math.round(
+          finalSalePriceInCents *
+            (data.commissionValue /
+              100),
+        );
+    } else {
+      commissionAmountInCents =
+        convertToCents(
+          data.commissionValue,
+        );
+
+      if (
+        commissionAmountInCents >
+        finalSalePriceInCents
+      ) {
+        throw new AppError(
+          'A comissão fixa não pode ser maior que o valor final da venda.',
+          400,
+        );
+      }
+    }
+  }
+
+  return {
+    grossSalePrice:
+      grossSalePriceInCents / 100,
+
+    discountAmount:
+      discountAmountInCents / 100,
+
+    finalSalePrice:
+      finalSalePriceInCents / 100,
+
+    commissionType:
+      data.commissionType ??
+      null,
+
+    commissionValue:
+      data.commissionValue ??
+      null,
+
+    commissionAmount:
+      commissionAmountInCents /
+      100,
+  };
+}
+
 function validatePayments(
   data: CreateSaleDTO,
 ) {
@@ -203,8 +364,13 @@ function validatePayments(
     );
   }
 
-  const salePriceInCents =
-    convertToCents(data.salePrice);
+  const financials =
+    calculateSaleFinancials(data);
+
+  const finalSalePriceInCents =
+    convertToCents(
+      financials.finalSalePrice,
+    );
 
   const paymentsTotalInCents =
     data.payments.reduce(
@@ -218,10 +384,10 @@ function validatePayments(
 
   if (
     paymentsTotalInCents !==
-    salePriceInCents
+    finalSalePriceInCents
   ) {
     const differenceInCents =
-      salePriceInCents -
+      finalSalePriceInCents -
       paymentsTotalInCents;
 
     if (differenceInCents > 0) {
@@ -357,6 +523,8 @@ function validatePayments(
 
     tradePayment:
       tradePayment ?? null,
+
+    financials,
   };
 }
 
@@ -367,6 +535,7 @@ class SaleService {
     const {
       primaryPaymentMethod,
       tradePayment,
+      financials,
     } = validatePayments(data);
 
     const device =
@@ -612,8 +781,37 @@ class SaleService {
                   purchasePrice:
                     device.purchasePrice,
 
+                  /*
+                   * O valor informado no formulário
+                   * antes da aplicação do desconto.
+                   */
+                  grossSalePrice:
+                    financials
+                      .grossSalePrice,
+
+                  discountAmount:
+                    financials
+                      .discountAmount,
+
+                  /*
+                   * salePrice permanece como o valor
+                   * líquido efetivamente pago.
+                   */
                   salePrice:
-                    data.salePrice,
+                    financials
+                      .finalSalePrice,
+
+                  commissionType:
+                    financials
+                      .commissionType,
+
+                  commissionValue:
+                    financials
+                      .commissionValue,
+
+                  commissionAmount:
+                    financials
+                      .commissionAmount,
 
                   customerName:
                     data.customerName,
@@ -894,6 +1092,24 @@ class SaleService {
         0,
       );
 
+    const totalCommission =
+      mappedSales.reduce(
+        (total, sale) =>
+          total +
+          sale.commissionAmount,
+        0,
+      );
+
+    const totalProfitAfterCommission =
+      mappedSales.reduce(
+        (total, sale) =>
+          total +
+          (sale.salePrice -
+            sale.purchasePrice -
+            sale.commissionAmount),
+        0,
+      );
+
     return {
       data: mappedSales,
 
@@ -904,6 +1120,8 @@ class SaleService {
         totalRevenue,
 
         totalProfit,
+        totalCommission,
+        totalProfitAfterCommission,
       },
     };
   }

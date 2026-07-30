@@ -36,6 +36,11 @@ enum PaymentMethod {
   OUTRO
 }
 
+enum CommissionType {
+  PERCENTAGE
+  FIXED
+}
+
 model User {
   id           String    @id @default(uuid()) @db.Uuid
   name         String    @db.VarChar(160)
@@ -86,15 +91,28 @@ model Sale {
   deviceId        String  @unique @db.Uuid
   tradeInDeviceId String? @unique @db.Uuid
 
-  sellerId        String?          @db.Uuid
-  sellerName      String           @default("Não informado") @db.VarChar(160)
-  deviceCondition DeviceCondition?
+  sellerId   String? @db.Uuid
+  sellerName String  @default("Não informado") @db.VarChar(160)
+
   deviceBrand     String           @db.VarChar(80)
   deviceModel     String           @db.VarChar(120)
   deviceImei      String           @db.VarChar(15)
+  deviceCondition DeviceCondition?
 
   purchasePrice Decimal @db.Decimal(12, 2)
-  salePrice     Decimal @db.Decimal(12, 2)
+
+  // Valor antes do desconto.
+  grossSalePrice Decimal? @db.Decimal(12, 2)
+
+  // Valor concedido de desconto.
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+
+  // Valor líquido efetivamente pago.
+  salePrice Decimal @db.Decimal(12, 2)
+
+  commissionType   CommissionType?
+  commissionValue  Decimal?        @db.Decimal(12, 2)
+  commissionAmount Decimal         @default(0) @db.Decimal(12, 2)
 
   customerName  String  @db.VarChar(160)
   customerPhone String? @db.VarChar(30)
@@ -125,6 +143,8 @@ model Sale {
   @@index([customerName])
   @@index([paymentMethod])
   @@index([sellerId])
+  @@index([deviceCondition])
+  @@index([commissionType])
   @@map("sales")
 }
 
