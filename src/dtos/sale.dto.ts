@@ -107,7 +107,8 @@ const optionalSalePriceSchema =
     (value) => {
       if (
         value === '' ||
-        value === undefined
+        value === undefined ||
+        value === null
       ) {
         return null;
       }
@@ -125,6 +126,84 @@ const optionalSalePriceSchema =
       .nullable()
       .optional(),
   );
+
+const optionalInstallmentsSchema =
+  z.preprocess(
+    (value) => {
+      if (
+        value === '' ||
+        value === undefined ||
+        value === null
+      ) {
+        return undefined;
+      }
+
+      return value;
+    },
+    z
+      .number({
+        message:
+          'A quantidade de parcelas deve ser um número.',
+      })
+      .int(
+        'A quantidade de parcelas deve ser um número inteiro.',
+      )
+      .min(
+        1,
+        'A quantidade mínima é de 1 parcela.',
+      )
+      .max(
+        36,
+        'A quantidade máxima é de 36 parcelas.',
+      )
+      .optional(),
+  );
+
+const paymentSchema = z
+  .object({
+    method: paymentMethodSchema,
+
+    amount: z
+      .number({
+        message:
+          'Informe o valor do pagamento.',
+      })
+      .positive(
+        'O valor do pagamento deve ser maior que zero.',
+      ),
+
+    installments:
+      optionalInstallmentsSchema,
+  })
+  .superRefine((data, context) => {
+    const isCreditCard =
+      data.method ===
+      'CARTAO_CREDITO';
+
+    if (
+      isCreditCard &&
+      data.installments === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['installments'],
+        message:
+          'Informe a quantidade de parcelas do cartão de crédito.',
+      });
+    }
+
+    if (
+      !isCreditCard &&
+      data.installments !== undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['installments'],
+        message:
+          'Parcelas somente podem ser informadas para cartão de crédito.',
+      });
+    }
+  });
 
 const tradeInDeviceSchema = z
   .object({
@@ -240,6 +319,12 @@ const tradeInDeviceSchema = z
       });
     }
   });
+
+function convertToCents(
+  value: number,
+) {
+  return Math.round(value * 100);
+}
 
 export const createSaleSchema = z
   .object({
@@ -364,8 +449,19 @@ export const createSaleSchema = z
         'O valor da venda deve ser maior que zero.',
       ),
 
-    paymentMethod:
-      paymentMethodSchema,
+    payments: z
+      .array(paymentSchema, {
+        message:
+          'Informe as formas de pagamento.',
+      })
+      .min(
+        1,
+        'Informe pelo menos uma forma de pagamento.',
+      )
+      .max(
+        10,
+        'Uma venda pode possuir no máximo 10 pagamentos.',
+      ),
 
     soldAt: dateSchema,
 
@@ -378,12 +474,76 @@ export const createSaleSchema = z
       tradeInDeviceSchema.optional(),
   })
   .superRefine((data, context) => {
-    const isTradeIn =
-      data.paymentMethod ===
-      'TROCA_DISPOSITIVO';
+    const salePriceInCents =
+      convertToCents(
+        data.salePrice,
+      );
+
+    const totalPaymentsInCents =
+      data.payments.reduce(
+        (total, payment) =>
+          total +
+          convertToCents(
+            payment.amount,
+          ),
+        0,
+      );
 
     if (
-      isTradeIn &&
+      totalPaymentsInCents !==
+      salePriceInCents
+    ) {
+      const differenceInCents =
+        salePriceInCents -
+        totalPaymentsInCents;
+
+      const difference =
+        Math.abs(
+          differenceInCents,
+        ) / 100;
+
+      const formattedDifference =
+        difference.toLocaleString(
+          'pt-BR',
+          {
+            style: 'currency',
+            currency: 'BRL',
+          },
+        );
+
+      context.addIssue({
+        code: 'custom',
+        path: ['payments'],
+        message:
+          differenceInCents > 0
+            ? `Ainda faltam ${formattedDifference} para completar o valor da venda.`
+            : `O total dos pagamentos excede o valor da venda em ${formattedDifference}.`,
+      });
+    }
+
+    const tradePayments =
+      data.payments.filter(
+        (payment) =>
+          payment.method ===
+          'TROCA_DISPOSITIVO',
+      );
+
+    if (
+      tradePayments.length > 1
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['payments'],
+        message:
+          'A venda pode possuir somente um pagamento por troca de dispositivo.',
+      });
+    }
+
+    const tradePayment =
+      tradePayments[0];
+
+    if (
+      tradePayment &&
       !data.tradeInDevice
     ) {
       context.addIssue({
@@ -395,15 +555,59 @@ export const createSaleSchema = z
     }
 
     if (
-      !isTradeIn &&
+      !tradePayment &&
       data.tradeInDevice
     ) {
       context.addIssue({
         code: 'custom',
         path: ['tradeInDevice'],
         message:
-          'O dispositivo recebido somente pode ser informado quando a forma de pagamento for troca de dispositivo.',
+          'O dispositivo recebido somente pode ser informado quando existir um pagamento por troca.',
       });
+    }
+
+    if (
+      tradePayment &&
+      data.tradeInDevice
+    ) {
+      const tradeAmountInCents =
+        convertToCents(
+          tradePayment.amount,
+        );
+
+      const purchasePriceInCents =
+        convertToCents(
+          data.tradeInDevice
+            .purchasePrice,
+        );
+
+      if (
+        tradeAmountInCents !==
+        purchasePriceInCents
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: [
+            'tradeInDevice',
+            'purchasePrice',
+          ],
+          message:
+            'O valor de compra do dispositivo recebido deve ser igual ao valor informado no pagamento por troca.',
+        });
+
+        context.addIssue({
+          code: 'custom',
+          path: [
+            'payments',
+            data.payments.indexOf(
+              tradePayment,
+            ),
+            'amount',
+          ],
+          message:
+            'O valor da troca deve ser igual ao valor de compra do dispositivo recebido.',
+        });
+      }
     }
   });
 
@@ -434,6 +638,11 @@ export const saleParamsSchema =
 export type CreateSaleDTO =
   z.infer<
     typeof createSaleSchema
+  >;
+
+export type CreateSalePaymentDTO =
+  z.infer<
+    typeof paymentSchema
   >;
 
 export type ListSalesQueryDTO =

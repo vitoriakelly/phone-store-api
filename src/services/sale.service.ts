@@ -7,14 +7,42 @@ import { AppError } from '../errors/app-error.js';
 import {
   Prisma,
   type Device,
+  type SalePayment,
 } from '../generated/prisma/client.js';
 
-type SaleWithTradeInDevice =
+type SaleWithRelations =
   Prisma.SaleGetPayload<{
     include: {
       tradeInDevice: true;
+      payments: true;
     };
   }>;
+
+function convertToCents(
+  value: number,
+) {
+  return Math.round(value * 100);
+}
+
+function formatCurrency(
+  valueInCents: number,
+) {
+  return (
+    Math.abs(valueInCents) / 100
+  ).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+}
+
+function nullableText(
+  value: string | null | undefined,
+) {
+  const normalizedValue =
+    value?.trim();
+
+  return normalizedValue || null;
+}
 
 function mapTradeInDevice(
   device: Device | null,
@@ -30,8 +58,10 @@ function mapTradeInDevice(
     storage: device.storage,
     color: device.color,
     imei: device.imei,
+
     batteryHealth:
       device.batteryHealth,
+
     condition: device.condition,
 
     purchasePrice: Number(
@@ -60,8 +90,28 @@ function mapTradeInDevice(
   };
 }
 
+function mapPayment(
+  payment: SalePayment,
+) {
+  return {
+    id: payment.id,
+    saleId: payment.saleId,
+    method: payment.method,
+    amount: Number(payment.amount),
+
+    installments:
+      payment.installments,
+
+    createdAt:
+      payment.createdAt.toISOString(),
+
+    updatedAt:
+      payment.updatedAt.toISOString(),
+  };
+}
+
 function mapSale(
-  sale: SaleWithTradeInDevice,
+  sale: SaleWithRelations,
 ) {
   return {
     id: sale.id,
@@ -83,6 +133,7 @@ function mapSale(
     ),
 
     customerName: sale.customerName,
+
     customerPhone:
       sale.customerPhone,
 
@@ -104,8 +155,17 @@ function mapSale(
     customerSocialNetwork:
       sale.customerSocialNetwork,
 
+    /*
+     * Campo legado mantido temporariamente.
+     * Representa o primeiro pagamento da venda.
+     */
     paymentMethod:
       sale.paymentMethod,
+
+    payments:
+      sale.payments.map(
+        mapPayment,
+      ),
 
     soldAt: sale.soldAt
       .toISOString()
@@ -126,17 +186,182 @@ function mapSale(
   };
 }
 
-function nullableText(
-  value: string | null | undefined,
+function validatePayments(
+  data: CreateSaleDTO,
 ) {
-  const normalizedValue =
-    value?.trim();
+  if (data.payments.length === 0) {
+    throw new AppError(
+      'Informe pelo menos uma forma de pagamento.',
+      400,
+    );
+  }
 
-  return normalizedValue || null;
+  const salePriceInCents =
+    convertToCents(data.salePrice);
+
+  const paymentsTotalInCents =
+    data.payments.reduce(
+      (total, payment) =>
+        total +
+        convertToCents(
+          payment.amount,
+        ),
+      0,
+    );
+
+  if (
+    paymentsTotalInCents !==
+    salePriceInCents
+  ) {
+    const differenceInCents =
+      salePriceInCents -
+      paymentsTotalInCents;
+
+    if (differenceInCents > 0) {
+      throw new AppError(
+        `Ainda faltam ${formatCurrency(
+          differenceInCents,
+        )} para completar o valor da venda.`,
+        400,
+      );
+    }
+
+    throw new AppError(
+      `O total dos pagamentos excede o valor da venda em ${formatCurrency(
+        differenceInCents,
+      )}.`,
+      400,
+    );
+  }
+
+  for (
+    const payment of data.payments
+  ) {
+    if (payment.amount <= 0) {
+      throw new AppError(
+        'Todos os pagamentos devem possuir valor maior que zero.',
+        400,
+      );
+    }
+
+    const isCreditCard =
+      payment.method ===
+      'CARTAO_CREDITO';
+
+    if (
+      isCreditCard &&
+      payment.installments ===
+        undefined
+    ) {
+      throw new AppError(
+        'Informe a quantidade de parcelas para pagamentos com cartão de crédito.',
+        400,
+      );
+    }
+
+    if (
+      !isCreditCard &&
+      payment.installments !==
+        undefined
+    ) {
+      throw new AppError(
+        'A quantidade de parcelas somente pode ser informada para cartão de crédito.',
+        400,
+      );
+    }
+  }
+
+  const tradePayments =
+    data.payments.filter(
+      (payment) =>
+        payment.method ===
+        'TROCA_DISPOSITIVO',
+    );
+
+  if (tradePayments.length > 1) {
+    throw new AppError(
+      'A venda pode possuir somente um pagamento por troca de dispositivo.',
+      400,
+    );
+  }
+
+  const tradePayment =
+    tradePayments[0];
+
+  if (
+    tradePayment &&
+    !data.tradeInDevice
+  ) {
+    throw new AppError(
+      'Informe os dados do dispositivo recebido na troca.',
+      400,
+    );
+  }
+
+  if (
+    !tradePayment &&
+    data.tradeInDevice
+  ) {
+    throw new AppError(
+      'Os dados do dispositivo recebido somente podem ser enviados quando existir um pagamento por troca.',
+      400,
+    );
+  }
+
+  if (
+    tradePayment &&
+    data.tradeInDevice
+  ) {
+    const tradeAmountInCents =
+      convertToCents(
+        tradePayment.amount,
+      );
+
+    const receivedDeviceValueInCents =
+      convertToCents(
+        data.tradeInDevice
+          .purchasePrice,
+      );
+
+    if (
+      tradeAmountInCents !==
+      receivedDeviceValueInCents
+    ) {
+      throw new AppError(
+        'O valor do pagamento por troca deve ser igual ao valor de compra do dispositivo recebido.',
+        400,
+      );
+    }
+  }
+
+  const primaryPayment =
+    data.payments[0];
+
+  if (!primaryPayment) {
+    throw new AppError(
+      'Informe pelo menos uma forma de pagamento.',
+      400,
+    );
+  }
+
+  return {
+    primaryPaymentMethod:
+      primaryPayment.method,
+
+    tradePayment:
+      tradePayment ?? null,
+  };
 }
 
 class SaleService {
-  async create(data: CreateSaleDTO) {
+  async create(
+    data: CreateSaleDTO,
+  ) {
+    const {
+      primaryPaymentMethod,
+      tradePayment,
+    } = validatePayments(data);
+
     const device =
       await prisma.device.findUnique({
         where: {
@@ -195,34 +420,22 @@ class SaleService {
         400,
       );
     }
-    const soldDeviceImei = device.imei;
+
+    const soldDeviceImei =
+      device.imei;
+
     const isTradeIn =
-      data.paymentMethod ===
-      'TROCA_DISPOSITIVO';
-
-    if (
-      isTradeIn &&
-      !data.tradeInDevice
-    ) {
-      throw new AppError(
-        'Informe os dados do dispositivo recebido na troca.',
-        400,
-      );
-    }
-
-    if (
-      !isTradeIn &&
-      data.tradeInDevice
-    ) {
-      throw new AppError(
-        'Os dados do dispositivo recebido somente podem ser enviados quando a forma de pagamento for troca de dispositivo.',
-        400,
-      );
-    }
+      tradePayment !== null;
 
     try {
       return await prisma.$transaction(
         async (transaction) => {
+          /*
+           * Executamos novamente as validações
+           * financeiras dentro da transação.
+           */
+          validatePayments(data);
+
           let tradeInDeviceId:
             | string
             | null = null;
@@ -239,7 +452,8 @@ class SaleService {
                 await transaction.device.findUnique(
                   {
                     where: {
-                      imei: tradeInData.imei,
+                      imei:
+                        tradeInData.imei,
                     },
 
                     select: {
@@ -248,7 +462,9 @@ class SaleService {
                   },
                 );
 
-              if (deviceWithSameImei) {
+              if (
+                deviceWithSameImei
+              ) {
                 throw new AppError(
                   'Já existe um dispositivo cadastrado com o IMEI informado na troca.',
                   409,
@@ -279,8 +495,7 @@ class SaleService {
 
                     batteryHealth:
                       tradeInData
-                        .batteryHealth ??
-                      null,
+                        .batteryHealth,
 
                     condition:
                       tradeInData
@@ -295,6 +510,10 @@ class SaleService {
                         .salePrice ??
                       null,
 
+                    /*
+                     * O fornecedor do aparelho
+                     * recebido é o comprador.
+                     */
                     supplier:
                       data.customerName,
 
@@ -336,7 +555,8 @@ class SaleService {
                   deviceModel:
                     device.model,
 
-                deviceImei: soldDeviceImei,
+                  deviceImei:
+                    soldDeviceImei,
 
                   purchasePrice:
                     device.purchasePrice,
@@ -382,8 +602,12 @@ class SaleService {
                       data.customerSocialNetwork,
                     ),
 
+                  /*
+                   * Campo legado.
+                   * Recebe o primeiro método.
+                   */
                   paymentMethod:
-                    data.paymentMethod,
+                    primaryPaymentMethod,
 
                   soldAt: new Date(
                     `${data.soldAt}T00:00:00.000Z`,
@@ -393,23 +617,56 @@ class SaleService {
                     nullableText(
                       data.notes,
                     ),
+
+                  payments: {
+                    create:
+                      data.payments.map(
+                        (payment) => ({
+                          method:
+                            payment.method,
+
+                          amount:
+                            payment.amount,
+
+                          installments:
+                            payment.method ===
+                            'CARTAO_CREDITO'
+                              ? payment.installments
+                              : null,
+                        }),
+                      ),
+                  },
                 },
 
                 include: {
                   tradeInDevice: true,
+
+                  payments: {
+                    orderBy: [
+                      {
+                        createdAt:
+                          'asc',
+                      },
+                      {
+                        id: 'asc',
+                      },
+                    ],
+                  },
                 },
               },
             );
 
-          await transaction.device.update({
-            where: {
-              id: device.id,
-            },
+          await transaction.device.update(
+            {
+              where: {
+                id: device.id,
+              },
 
-            data: {
-              status: 'VENDIDO',
+              data: {
+                status: 'VENDIDO',
+              },
             },
-          });
+          );
 
           return mapSale(sale);
         },
@@ -464,51 +721,62 @@ class SaleService {
       Prisma.SaleWhereInput = {};
 
     if (query.paymentMethod) {
-      where.paymentMethod =
-        query.paymentMethod;
+      where.payments = {
+        some: {
+          method:
+            query.paymentMethod,
+        },
+      };
     }
 
     if (query.search) {
       where.OR = [
         {
           customerName: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           customerPhone: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           customerSocialNetwork: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           customerCity: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           deviceBrand: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           deviceModel: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           deviceImei: {
-            contains: query.search,
+            contains:
+              query.search,
           },
         },
       ];
@@ -520,6 +788,17 @@ class SaleService {
 
         include: {
           tradeInDevice: true,
+
+          payments: {
+            orderBy: [
+              {
+                createdAt: 'asc',
+              },
+              {
+                id: 'asc',
+              },
+            ],
+          },
         },
 
         orderBy: [
@@ -566,7 +845,9 @@ class SaleService {
     };
   }
 
-  async findById(saleId: string) {
+  async findById(
+    saleId: string,
+  ) {
     const sale =
       await prisma.sale.findUnique({
         where: {
@@ -575,6 +856,17 @@ class SaleService {
 
         include: {
           tradeInDevice: true,
+
+          payments: {
+            orderBy: [
+              {
+                createdAt: 'asc',
+              },
+              {
+                id: 'asc',
+              },
+            ],
+          },
         },
       });
 
