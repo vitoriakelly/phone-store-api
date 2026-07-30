@@ -5,6 +5,7 @@ import type {
 } from 'express';
 
 import {
+  commissionsReportQuerySchema,
   devicesReportQuerySchema,
   salesReportQuerySchema,
 } from '../dtos/report.dto.js';
@@ -78,6 +79,38 @@ export class ReportController {
 
       const report =
         await reportService.getDevicesReport(
+          validation.data,
+        );
+
+      return response.status(200).json(report);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+  getCommissionsReport = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const validation =
+        commissionsReportQuerySchema.safeParse(
+          request.query,
+        );
+
+      if (!validation.success) {
+        return response.status(400).json({
+          message:
+            'Os filtros informados são inválidos.',
+          errors: formatValidationErrors(
+            validation.error.issues,
+          ),
+        });
+      }
+
+      const report =
+        await reportService.getCommissionsReport(
           validation.data,
         );
 

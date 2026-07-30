@@ -28,6 +28,36 @@ const optionalDateFilter = z
     return value;
   });
 
+const optionalUuidFilter = z.preprocess(
+  (value) => {
+    if (
+      typeof value === 'string' &&
+      value.trim() === ''
+    ) {
+      return undefined;
+    }
+
+    return value;
+  },
+  z
+    .string()
+    .uuid(
+      'O identificador do vendedor é inválido.',
+    )
+    .optional(),
+);
+
+function isValidPeriod(data: {
+  startDate?: string;
+  endDate?: string;
+}) {
+  if (!data.startDate || !data.endDate) {
+    return true;
+  }
+
+  return data.startDate <= data.endDate;
+}
+
 export const salesReportQuerySchema = z
   .object({
     startDate: optionalDateFilter,
@@ -35,21 +65,13 @@ export const salesReportQuerySchema = z
     imei: optionalTextFilter,
     customerName: optionalTextFilter,
     deviceName: optionalTextFilter,
+    sellerId: optionalUuidFilter,
   })
-  .refine(
-    (data) => {
-      if (!data.startDate || !data.endDate) {
-        return true;
-      }
-
-      return data.startDate <= data.endDate;
-    },
-    {
-      message:
-        'A data inicial não pode ser maior que a data final.',
-      path: ['endDate'],
-    },
-  );
+  .refine(isValidPeriod, {
+    message:
+      'A data inicial não pode ser maior que a data final.',
+    path: ['endDate'],
+  });
 
 export const devicesReportQuerySchema = z
   .object({
@@ -60,29 +82,39 @@ export const devicesReportQuerySchema = z
     deviceName: optionalTextFilter,
     status: z
       .enum([
+        'PENDENTE_INFORMACOES',
         'DISPONIVEL',
         'RESERVADO',
         'VENDIDO',
       ])
       .optional(),
   })
-  .refine(
-    (data) => {
-      if (!data.startDate || !data.endDate) {
-        return true;
-      }
+  .refine(isValidPeriod, {
+    message:
+      'A data inicial não pode ser maior que a data final.',
+    path: ['endDate'],
+  });
 
-      return data.startDate <= data.endDate;
-    },
-    {
+export const commissionsReportQuerySchema =
+  z
+    .object({
+      startDate: optionalDateFilter,
+      endDate: optionalDateFilter,
+      sellerId: optionalUuidFilter,
+    })
+    .refine(isValidPeriod, {
       message:
         'A data inicial não pode ser maior que a data final.',
       path: ['endDate'],
-    },
-  );
+    });
 
 export type SalesReportQuery =
   z.infer<typeof salesReportQuerySchema>;
 
 export type DevicesReportQuery =
   z.infer<typeof devicesReportQuerySchema>;
+
+export type CommissionsReportQuery =
+  z.infer<
+    typeof commissionsReportQuerySchema
+  >;

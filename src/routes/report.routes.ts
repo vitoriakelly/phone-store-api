@@ -21,3 +21,8 @@ reportRoutes.get(
   '/devices',
   reportController.getDevicesReport,
 );
+
+reportRoutes.get(
+  '/commissions',
+  reportController.getCommissionsReport,
+);
