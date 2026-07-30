@@ -6,11 +6,11 @@ import type {
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from 'jsonwebtoken';
 
-import { UserRole } from '../generated/prisma/client.js';
+import { prisma } from '../config/prisma.js';
 
 interface AuthenticationTokenPayload
   extends JwtPayload {
-  role?: UserRole;
+  tokenVersion?: number;
 }
 
 function getJwtSecret() {
@@ -32,16 +32,17 @@ function getAuthCookieName() {
   );
 }
 
-function isValidRole(
-  role: unknown,
-): role is UserRole {
+function isValidTokenVersion(
+  tokenVersion: unknown,
+): tokenVersion is number {
   return (
-    role === UserRole.MASTER ||
-    role === UserRole.FUNCIONARIO
+    typeof tokenVersion === 'number' &&
+    Number.isInteger(tokenVersion) &&
+    tokenVersion >= 0
   );
 }
 
-export function authenticate(
+export async function authenticate(
   request: Request,
   response: Response,
   next: NextFunction,
@@ -74,7 +75,9 @@ export function authenticate(
 
     if (
       !decodedToken.sub ||
-      !isValidRole(decodedToken.role)
+      !isValidTokenVersion(
+        decodedToken.tokenVersion,
+      )
     ) {
       return response.status(401).json({
         message:
@@ -82,16 +85,56 @@ export function authenticate(
       });
     }
 
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: decodedToken.sub,
+        },
+
+        select: {
+          id: true,
+          role: true,
+          active: true,
+          tokenVersion: true,
+        },
+      });
+
+    if (!user || !user.active) {
+      return response.status(401).json({
+        message:
+          'Sua sessão não é mais válida. Faça login novamente.',
+      });
+    }
+
+    if (
+      user.tokenVersion !==
+      decodedToken.tokenVersion
+    ) {
+      return response.status(401).json({
+        message:
+          'Sua sessão foi encerrada. Faça login novamente.',
+      });
+    }
+
     request.user = {
-      id: decodedToken.sub,
-      role: decodedToken.role,
+      id: user.id,
+      role: user.role,
     };
 
     return next();
-  } catch {
-    return response.status(401).json({
-      message:
-        'Sua sessão expirou ou é inválida. Faça login novamente.',
-    });
+  } catch (error) {
+    if (
+      error instanceof
+        jwt.JsonWebTokenError ||
+      error instanceof
+        jwt.TokenExpiredError
+    ) {
+      return response.status(401).json({
+        message:
+          'Sua sessão expirou ou é inválida. Faça login novamente.',
+      });
+    }
+
+    return next(error);
   }
 }

@@ -77,7 +77,8 @@ export class AuthService {
 
     const token = jwt.sign(
       {
-        role: user.role,
+        tokenVersion:
+          user.tokenVersion,
       },
       getJwtSecret(),
       {
@@ -131,6 +132,38 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async logout(userId: string) {
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+
+        select: {
+          id: true,
+          active: true,
+        },
+      });
+
+    if (!user) {
+      throw new AuthenticationError(
+        'Usuário não encontrado.',
+      );
+    }
+
+    await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+
+      data: {
+        tokenVersion: {
+          increment: 1,
+        },
+      },
+    });
   }
 }
 

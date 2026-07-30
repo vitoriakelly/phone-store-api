@@ -175,18 +175,54 @@ export class AuthController {
   };
 
   logout = async (
-    _request: Request,
+    request: Request,
     response: Response,
+    next: NextFunction,
   ) => {
-    response.clearCookie(
-      getAuthCookieName(),
-      getClearCookieOptions(),
-    );
+    try {
+      if (!request.user) {
+        return response.status(401).json({
+          message:
+            'Autenticação necessária.',
+        });
+      }
 
-    return response.status(200).json({
-      message:
-        'Logout realizado com sucesso.',
-    });
+      /*
+       * Primeiro invalida o token no
+       * banco. Depois remove o cookie.
+       */
+      await authService.logout(
+        request.user.id,
+      );
+
+      response.clearCookie(
+        getAuthCookieName(),
+        getClearCookieOptions(),
+      );
+
+      return response.status(200).json({
+        message:
+          'Logout realizado com sucesso.',
+      });
+    } catch (error) {
+      if (
+        error instanceof
+        AuthenticationError
+      ) {
+        response.clearCookie(
+          getAuthCookieName(),
+          getClearCookieOptions(),
+        );
+
+        return response
+          .status(error.statusCode)
+          .json({
+            message: error.message,
+          });
+      }
+
+      return next(error);
+    }
   };
 }
 

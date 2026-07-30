@@ -18,5 +18,6 @@ authRoutes.get(
 
 authRoutes.post(
   '/logout',
+  authenticate,
   authController.logout,
 );
