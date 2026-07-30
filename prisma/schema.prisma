@@ -86,12 +86,12 @@ model Sale {
   deviceId        String  @unique @db.Uuid
   tradeInDeviceId String? @unique @db.Uuid
 
-  sellerId   String? @db.Uuid
-  sellerName String  @default("Não informado") @db.VarChar(160)
-
-  deviceBrand String @db.VarChar(80)
-  deviceModel String @db.VarChar(120)
-  deviceImei  String @db.VarChar(15)
+  sellerId        String?          @db.Uuid
+  sellerName      String           @default("Não informado") @db.VarChar(160)
+  deviceCondition DeviceCondition?
+  deviceBrand     String           @db.VarChar(80)
+  deviceModel     String           @db.VarChar(120)
+  deviceImei      String           @db.VarChar(15)
 
   purchasePrice Decimal @db.Decimal(12, 2)
   salePrice     Decimal @db.Decimal(12, 2)

@@ -128,6 +128,9 @@ function mapSale(
     deviceModel: sale.deviceModel,
     deviceImei: sale.deviceImei,
 
+    deviceCondition:
+      sale.deviceCondition,
+
     purchasePrice: Number(
       sale.purchasePrice,
     ),
@@ -598,6 +601,13 @@ class SaleService {
 
                   deviceImei:
                     soldDeviceImei,
+
+                  /*
+                   * Condição salva como histórico
+                   * no momento da venda.
+                   */
+                  deviceCondition:
+                    device.condition,
 
                   purchasePrice:
                     device.purchasePrice,
