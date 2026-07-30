@@ -26,7 +26,19 @@ class UserController {
       },
     });
   }
+  async listSellers(
+    _request: Request,
+    response: Response,
+  ) {
+    const sellers =
+      await userService.listSellers();
 
+    return response.status(200).json({
+      data: {
+        sellers,
+      },
+    });
+  }
   async createEmployee(
     request: Request,
     response: Response,

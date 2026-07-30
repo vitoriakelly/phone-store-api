@@ -6,6 +6,7 @@ import type {
 import { AppError } from '../errors/app-error.js';
 import {
   Prisma,
+  UserRole,
   type Device,
   type SalePayment,
 } from '../generated/prisma/client.js';
@@ -119,6 +120,9 @@ function mapSale(
 
     tradeInDeviceId:
       sale.tradeInDeviceId,
+
+    sellerId: sale.sellerId,
+    sellerName: sale.sellerName,
 
     deviceBrand: sale.deviceBrand,
     deviceModel: sale.deviceModel,
@@ -431,10 +435,38 @@ class SaleService {
       return await prisma.$transaction(
         async (transaction) => {
           /*
-           * Executamos novamente as validações
-           * financeiras dentro da transação.
+           * As validações financeiras são
+           * executadas novamente dentro
+           * da transação.
            */
           validatePayments(data);
+
+          const seller =
+            await transaction.user.findFirst({
+              where: {
+                id: data.sellerId,
+                active: true,
+
+                role: {
+                  in: [
+                    UserRole.MASTER,
+                    UserRole.FUNCIONARIO,
+                  ],
+                },
+              },
+
+              select: {
+                id: true,
+                name: true,
+              },
+            });
+
+          if (!seller) {
+            throw new AppError(
+              'O vendedor selecionado não existe ou está desativado.',
+              400,
+            );
+          }
 
           let tradeInDeviceId:
             | string
@@ -548,6 +580,15 @@ class SaleService {
                     device.id,
 
                   tradeInDeviceId,
+
+                  sellerId:
+                    seller.id,
+
+                  /*
+                   * Nome salvo como histórico.
+                   */
+                  sellerName:
+                    seller.name,
 
                   deviceBrand:
                     device.brand,
@@ -729,10 +770,22 @@ class SaleService {
       };
     }
 
+    if (query.sellerId) {
+      where.sellerId =
+        query.sellerId;
+    }
+
     if (query.search) {
       where.OR = [
         {
           customerName: {
+            contains:
+              query.search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          sellerName: {
             contains:
               query.search,
             mode: 'insensitive',

@@ -7,8 +7,15 @@ import { authorize } from '../middlewares/authorize.js';
 
 export const userRoutes = Router();
 
+userRoutes.use(authenticate);
+
+
+userRoutes.get(
+  '/sellers',
+  userController.listSellers,
+);
+
 userRoutes.use(
-  authenticate,
   authorize(UserRole.MASTER),
 );
 

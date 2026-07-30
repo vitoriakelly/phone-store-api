@@ -19,7 +19,11 @@ const employeeSelect = {
   createdAt: true,
   updatedAt: true,
 } as const;
-
+const sellerSelect = {
+  id: true,
+  name: true,
+  role: true,
+} as const;
 export class UserNotFoundError extends Error {
   readonly statusCode = 404;
 
@@ -63,7 +67,26 @@ export class UserService {
       select: employeeSelect,
     });
   }
+  async listSellers() {
+    return prisma.user.findMany({
+      where: {
+        active: true,
 
+        role: {
+          in: [
+            UserRole.MASTER,
+            UserRole.FUNCIONARIO,
+          ],
+        },
+      },
+
+      orderBy: {
+        name: 'asc',
+      },
+
+      select: sellerSelect,
+    });
+  }
   async createEmployee(
     input: CreateEmployeeInput,
   ) {

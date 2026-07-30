@@ -309,7 +309,7 @@ const tradeInDeviceSchema = z
       data.salePrice !== null &&
       data.salePrice !== undefined &&
       data.salePrice <
-        data.purchasePrice
+      data.purchasePrice
     ) {
       context.addIssue({
         code: 'custom',
@@ -332,6 +332,14 @@ export const createSaleSchema = z
       .string()
       .uuid(
         'O identificador do dispositivo é inválido.',
+      ),
+    sellerId: z
+      .string({
+        message:
+          'Selecione o vendedor responsável pela venda.',
+      })
+      .uuid(
+        'O identificador do vendedor é inválido.',
       ),
 
     customerName: z
@@ -624,6 +632,12 @@ export const listSalesQuerySchema =
 
     paymentMethod:
       paymentMethodSchema.optional(),
+    sellerId: z
+      .string()
+      .uuid(
+        'O identificador do vendedor é inválido.',
+      )
+      .optional(),
   });
 
 export const saleParamsSchema =
