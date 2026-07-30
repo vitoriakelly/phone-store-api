@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const deviceStatusSchema = z.enum([
+  'PENDENTE_INFORMACOES',
   'DISPONIVEL',
   'RESERVADO',
   'VENDIDO',
@@ -12,58 +13,115 @@ export const deviceConditionSchema = z.enum([
   'USADO',
 ]);
 
-const devicePayloadSchema = z.object({
-  brand: z
+const optionalColorSchema = z.preprocess(
+  (value) => {
+    if (
+      typeof value === 'string' &&
+      value.trim() === ''
+    ) {
+      return null;
+    }
+
+    return value;
+  },
+  z
     .string()
     .trim()
-    .min(2, 'A marca deve possuir pelo menos 2 caracteres.')
-    .max(80, 'A marca deve possuir no máximo 80 caracteres.'),
+    .min(
+      2,
+      'A cor deve possuir pelo menos 2 caracteres.',
+    )
+    .max(
+      50,
+      'A cor deve possuir no máximo 50 caracteres.',
+    )
+    .nullable()
+    .optional(),
+);
 
-  model: z
-    .string()
-    .trim()
-    .min(2, 'O modelo deve possuir pelo menos 2 caracteres.')
-    .max(120, 'O modelo deve possuir no máximo 120 caracteres.'),
+const optionalImeiSchema = z.preprocess(
+  (value) => {
+    if (
+      typeof value === 'string' &&
+      value.trim() === ''
+    ) {
+      return null;
+    }
 
-  storage: z
-    .string()
-    .trim()
-    .min(1, 'Informe o armazenamento.')
-    .max(30, 'O armazenamento deve possuir no máximo 30 caracteres.'),
-
-  color: z
-    .string()
-    .trim()
-    .min(2, 'Informe a cor do aparelho.')
-    .max(50, 'A cor deve possuir no máximo 50 caracteres.'),
-
-  imei: z
+    return value;
+  },
+  z
     .string()
     .trim()
     .regex(
       /^\d{15}$/,
       'O IMEI deve possuir exatamente 15 números.',
-    ),
-
-  batteryHealth: z
-    .number()
-    .int('A saúde da bateria deve ser um número inteiro.')
-    .min(0, 'A saúde da bateria não pode ser menor que 0%.')
-    .max(100, 'A saúde da bateria não pode ser maior que 100%.')
+    )
     .nullable()
     .optional(),
+);
 
-  condition: deviceConditionSchema,
+const optionalSalePriceSchema = z.preprocess(
+  (value) => {
+    if (value === '') {
+      return null;
+    }
 
-  purchasePrice: z
-    .number()
-    .positive('O valor de compra deve ser maior que zero.'),
+    return value;
+  },
+  z
+    .number({
+      message:
+        'O valor de venda deve ser um número.',
+    })
+    .positive(
+      'O valor de venda deve ser maior que zero.',
+    )
+    .nullable()
+    .optional(),
+);
 
-  salePrice: z
-    .number()
-    .positive('O valor de venda deve ser maior que zero.'),
+const optionalBatteryHealthSchema =
+  z.preprocess(
+    (value) => {
+      if (value === '') {
+        return null;
+      }
 
-  supplier: z
+      return value;
+    },
+    z
+      .number({
+        message:
+          'A saúde da bateria deve ser um número.',
+      })
+      .int(
+        'A saúde da bateria deve ser um número inteiro.',
+      )
+      .min(
+        0,
+        'A saúde da bateria não pode ser menor que 0%.',
+      )
+      .max(
+        100,
+        'A saúde da bateria não pode ser maior que 100%.',
+      )
+      .nullable()
+      .optional(),
+  );
+
+const optionalSupplierSchema = z.preprocess(
+  (value) => {
+    if (
+      typeof value === 'string' &&
+      value.trim() === ''
+    ) {
+      return null;
+    }
+
+    return value;
+  },
+  z
     .string()
     .trim()
     .max(
@@ -72,24 +130,20 @@ const devicePayloadSchema = z.object({
     )
     .nullable()
     .optional(),
+);
 
-  entryDate: z
-    .string()
-    .regex(
-      /^\d{4}-\d{2}-\d{2}$/,
-      'A data de entrada deve estar no formato AAAA-MM-DD.',
-    )
-    .refine(
-      (value) =>
-        !Number.isNaN(
-          Date.parse(`${value}T00:00:00.000Z`),
-        ),
-      'Informe uma data de entrada válida.',
-    ),
+const optionalNotesSchema = z.preprocess(
+  (value) => {
+    if (
+      typeof value === 'string' &&
+      value.trim() === ''
+    ) {
+      return null;
+    }
 
-  status: deviceStatusSchema,
-
-  notes: z
+    return value;
+  },
+  z
     .string()
     .trim()
     .max(
@@ -98,68 +152,223 @@ const devicePayloadSchema = z.object({
     )
     .nullable()
     .optional(),
-});
+);
 
-export const createDeviceSchema = devicePayloadSchema
-  .extend({
-    status: deviceStatusSchema.default('DISPONIVEL'),
-  })
-  .superRefine((data, context) => {
-    if (data.salePrice < data.purchasePrice) {
-      context.addIssue({
-        code: 'custom',
-        path: ['salePrice'],
-        message:
-          'O valor de venda não pode ser menor que o valor de compra.',
-      });
-    }
-  });
-
-export const updateDeviceSchema = devicePayloadSchema
-  .partial()
-  .refine(
-    (data) => Object.keys(data).length > 0,
-    'Informe pelo menos um campo para atualizar.',
-  )
-  .superRefine((data, context) => {
-    if (
-      data.purchasePrice !== undefined &&
-      data.salePrice !== undefined &&
-      data.salePrice < data.purchasePrice
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['salePrice'],
-        message:
-          'O valor de venda não pode ser menor que o valor de compra.',
-      });
-    }
-  });
-
-export const listDevicesQuerySchema = z.object({
-  search: z
-    .string()
+const devicePayloadSchema = z.object({
+  brand: z
+    .string({
+      message: 'Informe a marca do aparelho.',
+    })
     .trim()
-    .max(120)
-    .optional(),
+    .min(
+      2,
+      'A marca deve possuir pelo menos 2 caracteres.',
+    )
+    .max(
+      80,
+      'A marca deve possuir no máximo 80 caracteres.',
+    ),
 
-  status: deviceStatusSchema.optional(),
+  model: z
+    .string({
+      message: 'Informe o modelo do aparelho.',
+    })
+    .trim()
+    .min(
+      2,
+      'O modelo deve possuir pelo menos 2 caracteres.',
+    )
+    .max(
+      120,
+      'O modelo deve possuir no máximo 120 caracteres.',
+    ),
+
+  storage: z
+    .string({
+      message: 'Informe o armazenamento.',
+    })
+    .trim()
+    .min(
+      1,
+      'Informe o armazenamento.',
+    )
+    .max(
+      30,
+      'O armazenamento deve possuir no máximo 30 caracteres.',
+    ),
+
+  color: optionalColorSchema,
+
+  imei: optionalImeiSchema,
+
+  batteryHealth:
+    optionalBatteryHealthSchema,
+
+  condition: deviceConditionSchema,
+
+  purchasePrice: z
+    .number({
+      message:
+        'O valor de compra deve ser um número.',
+    })
+    .positive(
+      'O valor de compra deve ser maior que zero.',
+    ),
+
+  salePrice: optionalSalePriceSchema,
+
+  supplier: optionalSupplierSchema,
+
+  entryDate: z
+    .string({
+      message:
+        'Informe a data de entrada.',
+    })
+    .regex(
+      /^\d{4}-\d{2}-\d{2}$/,
+      'A data de entrada deve estar no formato AAAA-MM-DD.',
+    )
+    .refine(
+      (value) =>
+        !Number.isNaN(
+          Date.parse(
+            `${value}T00:00:00.000Z`,
+          ),
+        ),
+      'Informe uma data de entrada válida.',
+    ),
+
+  status: deviceStatusSchema,
+
+  notes: optionalNotesSchema,
 });
 
-export const deviceParamsSchema = z.object({
-  id: z
-    .string()
-    .uuid('O identificador do dispositivo é inválido.'),
-});
+export const createDeviceSchema =
+  devicePayloadSchema
+    .extend({
+      status:
+        deviceStatusSchema.default(
+          'DISPONIVEL',
+        ),
+    })
+    .superRefine((data, context) => {
+      if (
+        data.salePrice !== null &&
+        data.salePrice !== undefined &&
+        data.salePrice <
+          data.purchasePrice
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['salePrice'],
+          message:
+            'O valor de venda não pode ser menor que o valor de compra.',
+        });
+      }
 
-export type CreateDeviceDTO = z.infer<
-  typeof createDeviceSchema
->;
+      if (
+        data.status ===
+        'PENDENTE_INFORMACOES'
+      ) {
+        return;
+      }
 
-export type UpdateDeviceDTO = z.infer<
-  typeof updateDeviceSchema
->;
+      if (!data.color) {
+        context.addIssue({
+          code: 'custom',
+          path: ['color'],
+          message:
+            'Informe a cor antes de disponibilizar o aparelho.',
+        });
+      }
 
-export type ListDevicesQueryDTO = z.infer<
-  typeof listDevicesQuerySchema
->;
+      if (!data.imei) {
+        context.addIssue({
+          code: 'custom',
+          path: ['imei'],
+          message:
+            'Informe o IMEI antes de disponibilizar o aparelho.',
+        });
+      }
+
+      if (
+        data.salePrice === null ||
+        data.salePrice === undefined
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['salePrice'],
+          message:
+            'Informe o valor de venda antes de disponibilizar o aparelho.',
+        });
+      }
+    });
+
+export const updateDeviceSchema =
+  devicePayloadSchema
+    .partial()
+    .refine(
+      (data) =>
+        Object.keys(data).length > 0,
+      {
+        message:
+          'Informe pelo menos um campo para atualizar.',
+      },
+    )
+    .superRefine((data, context) => {
+      if (
+        data.purchasePrice !==
+          undefined &&
+        data.salePrice !==
+          undefined &&
+        data.salePrice !== null &&
+        data.salePrice <
+          data.purchasePrice
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['salePrice'],
+          message:
+            'O valor de venda não pode ser menor que o valor de compra.',
+        });
+      }
+    });
+
+export const listDevicesQuerySchema =
+  z.object({
+    search: z
+      .string()
+      .trim()
+      .max(
+        120,
+        'A busca deve possuir no máximo 120 caracteres.',
+      )
+      .optional(),
+
+    status:
+      deviceStatusSchema.optional(),
+  });
+
+export const deviceParamsSchema =
+  z.object({
+    id: z
+      .string()
+      .uuid(
+        'O identificador do dispositivo é inválido.',
+      ),
+  });
+
+export type CreateDeviceDTO =
+  z.infer<
+    typeof createDeviceSchema
+  >;
+
+export type UpdateDeviceDTO =
+  z.infer<
+    typeof updateDeviceSchema
+  >;
+
+export type ListDevicesQueryDTO =
+  z.infer<
+    typeof listDevicesQuerySchema
+  >;
