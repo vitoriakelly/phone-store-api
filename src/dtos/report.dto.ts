@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+export const paymentMethodSchema = z.enum([
+  'PIX',
+  'DINHEIRO',
+  'CARTAO_CREDITO',
+  'CARTAO_DEBITO',
+  'TRANSFERENCIA',
+  'TROCA_DISPOSITIVO',
+  'OUTRO',
+]);
+
 const optionalTextFilter = z
   .string()
   .trim()
@@ -47,6 +57,32 @@ const optionalUuidFilter = z.preprocess(
     .optional(),
 );
 
+const pageSchema = z.preprocess(
+  (value) => {
+    if (
+      value === undefined ||
+      value === null ||
+      value === ''
+    ) {
+      return 1;
+    }
+
+    return Number(value);
+  },
+  z
+    .number({
+      message:
+        'A página deve ser um número.',
+    })
+    .int(
+      'A página deve ser um número inteiro.',
+    )
+    .min(
+      1,
+      'A página deve ser maior ou igual a 1.',
+    ),
+);
+
 function isValidPeriod(data: {
   startDate?: string;
   endDate?: string;
@@ -60,12 +96,15 @@ function isValidPeriod(data: {
 
 export const salesReportQuerySchema = z
   .object({
+    page: pageSchema,
     startDate: optionalDateFilter,
     endDate: optionalDateFilter,
     imei: optionalTextFilter,
     customerName: optionalTextFilter,
     deviceName: optionalTextFilter,
     sellerId: optionalUuidFilter,
+    paymentMethod:
+      paymentMethodSchema.optional(),
   })
   .refine(isValidPeriod, {
     message:
@@ -75,6 +114,7 @@ export const salesReportQuerySchema = z
 
 export const devicesReportQuerySchema = z
   .object({
+    page: pageSchema,
     startDate: optionalDateFilter,
     endDate: optionalDateFilter,
     imei: optionalTextFilter,
@@ -98,6 +138,7 @@ export const devicesReportQuerySchema = z
 export const commissionsReportQuerySchema =
   z
     .object({
+      page: pageSchema,
       startDate: optionalDateFilter,
       endDate: optionalDateFilter,
       sellerId: optionalUuidFilter,
