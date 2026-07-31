@@ -13,6 +13,25 @@ export const deviceConditionSchema = z.enum([
   'USADO',
 ]);
 
+const dateSchema = z
+  .string({
+    message:
+      'Informe a data de entrada.',
+  })
+  .regex(
+    /^\d{4}-\d{2}-\d{2}$/,
+    'A data deve estar no formato AAAA-MM-DD.',
+  )
+  .refine(
+    (value) =>
+      !Number.isNaN(
+        Date.parse(
+          `${value}T00:00:00.000Z`,
+        ),
+      ),
+    'Informe uma data válida.',
+  );
+
 const optionalColorSchema = z.preprocess(
   (value) => {
     if (
@@ -157,7 +176,8 @@ const optionalNotesSchema = z.preprocess(
 const devicePayloadSchema = z.object({
   brand: z
     .string({
-      message: 'Informe a marca do aparelho.',
+      message:
+        'Informe a marca do aparelho.',
     })
     .trim()
     .min(
@@ -171,7 +191,8 @@ const devicePayloadSchema = z.object({
 
   model: z
     .string({
-      message: 'Informe o modelo do aparelho.',
+      message:
+        'Informe o modelo do aparelho.',
     })
     .trim()
     .min(
@@ -185,7 +206,8 @@ const devicePayloadSchema = z.object({
 
   storage: z
     .string({
-      message: 'Informe o armazenamento.',
+      message:
+        'Informe o armazenamento.',
     })
     .trim()
     .min(
@@ -198,7 +220,6 @@ const devicePayloadSchema = z.object({
     ),
 
   color: optionalColorSchema,
-
   imei: optionalImeiSchema,
 
   batteryHealth:
@@ -216,30 +237,9 @@ const devicePayloadSchema = z.object({
     ),
 
   salePrice: optionalSalePriceSchema,
-
   supplier: optionalSupplierSchema,
-
-  entryDate: z
-    .string({
-      message:
-        'Informe a data de entrada.',
-    })
-    .regex(
-      /^\d{4}-\d{2}-\d{2}$/,
-      'A data de entrada deve estar no formato AAAA-MM-DD.',
-    )
-    .refine(
-      (value) =>
-        !Number.isNaN(
-          Date.parse(
-            `${value}T00:00:00.000Z`,
-          ),
-        ),
-      'Informe uma data de entrada válida.',
-    ),
-
+  entryDate: dateSchema,
   status: deviceStatusSchema,
-
   notes: optionalNotesSchema,
 });
 
@@ -251,58 +251,62 @@ export const createDeviceSchema =
           'DISPONIVEL',
         ),
     })
-    .superRefine((data, context) => {
-      if (
-        data.salePrice !== null &&
-        data.salePrice !== undefined &&
-        data.salePrice <
-          data.purchasePrice
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['salePrice'],
-          message:
-            'O valor de venda não pode ser menor que o valor de compra.',
-        });
-      }
+    .superRefine(
+      (data, context) => {
+        if (
+          data.salePrice !== null &&
+          data.salePrice !==
+            undefined &&
+          data.salePrice <
+            data.purchasePrice
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['salePrice'],
+            message:
+              'O valor de venda não pode ser menor que o valor de compra.',
+          });
+        }
 
-      if (
-        data.status ===
-        'PENDENTE_INFORMACOES'
-      ) {
-        return;
-      }
+        if (
+          data.status ===
+          'PENDENTE_INFORMACOES'
+        ) {
+          return;
+        }
 
-      if (!data.color) {
-        context.addIssue({
-          code: 'custom',
-          path: ['color'],
-          message:
-            'Informe a cor antes de disponibilizar o aparelho.',
-        });
-      }
+        if (!data.color) {
+          context.addIssue({
+            code: 'custom',
+            path: ['color'],
+            message:
+              'Informe a cor antes de disponibilizar o aparelho.',
+          });
+        }
 
-      if (!data.imei) {
-        context.addIssue({
-          code: 'custom',
-          path: ['imei'],
-          message:
-            'Informe o IMEI antes de disponibilizar o aparelho.',
-        });
-      }
+        if (!data.imei) {
+          context.addIssue({
+            code: 'custom',
+            path: ['imei'],
+            message:
+              'Informe o IMEI antes de disponibilizar o aparelho.',
+          });
+        }
 
-      if (
-        data.salePrice === null ||
-        data.salePrice === undefined
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['salePrice'],
-          message:
-            'Informe o valor de venda antes de disponibilizar o aparelho.',
-        });
-      }
-    });
+        if (
+          data.salePrice === null ||
+          data.salePrice ===
+            undefined
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['salePrice'],
+            message:
+              'Informe o valor de venda antes de disponibilizar o aparelho.',
+          });
+        }
+      },
+    );
 
 export const updateDeviceSchema =
   devicePayloadSchema
@@ -315,39 +319,79 @@ export const updateDeviceSchema =
           'Informe pelo menos um campo para atualizar.',
       },
     )
-    .superRefine((data, context) => {
-      if (
-        data.purchasePrice !==
-          undefined &&
-        data.salePrice !==
-          undefined &&
-        data.salePrice !== null &&
-        data.salePrice <
-          data.purchasePrice
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['salePrice'],
-          message:
-            'O valor de venda não pode ser menor que o valor de compra.',
-        });
-      }
-    });
+    .superRefine(
+      (data, context) => {
+        if (
+          data.purchasePrice !==
+            undefined &&
+          data.salePrice !==
+            undefined &&
+          data.salePrice !== null &&
+          data.salePrice <
+            data.purchasePrice
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['salePrice'],
+            message:
+              'O valor de venda não pode ser menor que o valor de compra.',
+          });
+        }
+      },
+    );
 
 export const listDevicesQuerySchema =
-  z.object({
-    search: z
-      .string()
-      .trim()
-      .max(
-        120,
-        'A busca deve possuir no máximo 120 caracteres.',
-      )
-      .optional(),
+  z
+    .object({
+      page: z.coerce
+        .number({
+          message:
+            'A página deve ser um número.',
+        })
+        .int(
+          'A página deve ser um número inteiro.',
+        )
+        .min(
+          1,
+          'A página deve ser maior ou igual a 1.',
+        )
+        .default(1),
 
-    status:
-      deviceStatusSchema.optional(),
-  });
+      search: z
+        .string()
+        .trim()
+        .max(
+          120,
+          'A busca deve possuir no máximo 120 caracteres.',
+        )
+        .optional(),
+
+      status:
+        deviceStatusSchema.optional(),
+
+      startDate:
+        dateSchema.optional(),
+
+      endDate:
+        dateSchema.optional(),
+    })
+    .superRefine(
+      (data, context) => {
+        if (
+          data.startDate &&
+          data.endDate &&
+          data.startDate >
+            data.endDate
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['endDate'],
+            message:
+              'A data final não pode ser anterior à data inicial.',
+          });
+        }
+      },
+    );
 
 export const deviceParamsSchema =
   z.object({

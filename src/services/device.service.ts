@@ -18,7 +18,27 @@ interface DeviceCompletionData {
   salePrice: number | null;
 }
 
-function mapDevice(device: DeviceRecord) {
+const DEVICES_PAGE_SIZE = 10;
+
+function getStartOfDay(
+  date: string,
+) {
+  return new Date(
+    `${date}T00:00:00.000Z`,
+  );
+}
+
+function getEndOfDay(
+  date: string,
+) {
+  return new Date(
+    `${date}T23:59:59.999Z`,
+  );
+}
+
+function mapDevice(
+  device: DeviceRecord,
+) {
   return {
     id: device.id,
     brand: device.brand,
@@ -26,25 +46,38 @@ function mapDevice(device: DeviceRecord) {
     storage: device.storage,
     color: device.color,
     imei: device.imei,
-    batteryHealth: device.batteryHealth,
+    batteryHealth:
+      device.batteryHealth,
     condition: device.condition,
+
     purchasePrice: Number(
       device.purchasePrice,
     ),
+
     salePrice:
       device.salePrice === null
         ? null
-        : Number(device.salePrice),
+        : Number(
+            device.salePrice,
+          ),
+
     supplier: device.supplier,
-    entryDate: device.entryDate
-      .toISOString()
-      .split('T')[0],
+
+    entryDate:
+      device.entryDate
+        .toISOString()
+        .split('T')[0],
+
     status: device.status,
     notes: device.notes,
+
     createdAt:
-      device.createdAt.toISOString(),
+      device.createdAt
+        .toISOString(),
+
     updatedAt:
-      device.updatedAt.toISOString(),
+      device.updatedAt
+        .toISOString(),
   };
 }
 
@@ -81,7 +114,9 @@ function validateDeviceCompletion(
 }
 
 class DeviceService {
-  async create(data: CreateDeviceDTO) {
+  async create(
+    data: CreateDeviceDTO,
+  ) {
     if (data.imei) {
       const existingDevice =
         await prisma.device.findUnique({
@@ -114,7 +149,8 @@ class DeviceService {
 
     if (
       salePrice !== null &&
-      salePrice < data.purchasePrice
+      salePrice <
+        data.purchasePrice
     ) {
       throw new AppError(
         'O valor de venda não pode ser menor que o valor de compra.',
@@ -128,21 +164,36 @@ class DeviceService {
           brand: data.brand,
           model: data.model,
           storage: data.storage,
-          color: data.color ?? null,
-          imei: data.imei ?? null,
+
+          color:
+            data.color ?? null,
+
+          imei:
+            data.imei ?? null,
+
           batteryHealth:
-            data.batteryHealth ?? null,
-          condition: data.condition,
+            data.batteryHealth ??
+            null,
+
+          condition:
+            data.condition,
+
           purchasePrice:
             data.purchasePrice,
+
           salePrice,
+
           supplier:
             data.supplier ?? null,
+
           entryDate: new Date(
             `${data.entryDate}T00:00:00.000Z`,
           ),
+
           status: data.status,
-          notes: data.notes ?? null,
+
+          notes:
+            data.notes ?? null,
         },
       });
 
@@ -152,71 +203,148 @@ class DeviceService {
   async list(
     query: ListDevicesQueryDTO,
   ) {
-    const where: Prisma.DeviceWhereInput =
-      {};
+    const where:
+      Prisma.DeviceWhereInput = {};
 
     if (query.status) {
-      where.status = query.status;
+      where.status =
+        query.status;
+    }
+
+    if (
+      query.startDate ||
+      query.endDate
+    ) {
+      where.entryDate = {
+        ...(query.startDate
+          ? {
+              gte: getStartOfDay(
+                query.startDate,
+              ),
+            }
+          : {}),
+
+        ...(query.endDate
+          ? {
+              lte: getEndOfDay(
+                query.endDate,
+              ),
+            }
+          : {}),
+      };
     }
 
     if (query.search) {
       where.OR = [
         {
           brand: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           model: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           imei: {
-            contains: query.search,
+            contains:
+              query.search,
           },
         },
         {
           color: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           storage: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
         {
           supplier: {
-            contains: query.search,
+            contains:
+              query.search,
             mode: 'insensitive',
           },
         },
       ];
     }
 
-    const devices =
-      await prisma.device.findMany({
+    const skip =
+      (query.page - 1) *
+      DEVICES_PAGE_SIZE;
+
+    const [
+      devices,
+      total,
+    ] = await Promise.all([
+      prisma.device.findMany({
         where,
+        skip,
+        take:
+          DEVICES_PAGE_SIZE,
 
         orderBy: [
           {
-            status: 'asc',
-          },
-          {
             createdAt: 'desc',
           },
+          {
+            entryDate: 'desc',
+          },
         ],
-      });
+      }),
 
-    return devices.map(mapDevice);
+      prisma.device.count({
+        where,
+      }),
+    ]);
+
+    const totalPages =
+      total === 0
+        ? 0
+        : Math.ceil(
+            total /
+              DEVICES_PAGE_SIZE,
+          );
+
+    return {
+      data:
+        devices.map(mapDevice),
+
+      meta: {
+        page: query.page,
+
+        pageSize:
+          DEVICES_PAGE_SIZE,
+
+        total,
+        totalPages,
+
+        hasPreviousPage:
+          query.page > 1,
+
+        hasNextPage:
+          query.page <
+          totalPages,
+      },
+
+      filters: query,
+    };
   }
 
-  async findById(deviceId: string) {
+  async findById(
+    deviceId: string,
+  ) {
     const device =
       await prisma.device.findUnique({
         where: {
@@ -255,7 +383,8 @@ class DeviceService {
     if (
       data.imei !== undefined &&
       data.imei !== null &&
-      data.imei !== existingDevice.imei
+      data.imei !==
+        existingDevice.imei
     ) {
       const deviceWithSameImei =
         await prisma.device.findUnique({
@@ -279,17 +408,20 @@ class DeviceService {
     const purchasePrice =
       data.purchasePrice ??
       Number(
-        existingDevice.purchasePrice,
+        existingDevice
+          .purchasePrice,
       );
 
     const salePrice =
-      data.salePrice !== undefined
+      data.salePrice !==
+      undefined
         ? data.salePrice
-        : existingDevice.salePrice ===
-            null
+        : existingDevice
+              .salePrice === null
           ? null
           : Number(
-              existingDevice.salePrice,
+              existingDevice
+                .salePrice,
             );
 
     const color =
@@ -308,7 +440,8 @@ class DeviceService {
 
     if (
       salePrice !== null &&
-      salePrice < purchasePrice
+      salePrice <
+        purchasePrice
     ) {
       throw new AppError(
         'O valor de venda não pode ser menor que o valor de compra.',
@@ -342,7 +475,8 @@ class DeviceService {
 
           ...(data.storage !==
             undefined && {
-            storage: data.storage,
+            storage:
+              data.storage,
           }),
 
           ...(data.color !==
@@ -363,7 +497,8 @@ class DeviceService {
 
           ...(data.condition !==
             undefined && {
-            condition: data.condition,
+            condition:
+              data.condition,
           }),
 
           ...(data.purchasePrice !==
@@ -380,7 +515,8 @@ class DeviceService {
 
           ...(data.supplier !==
             undefined && {
-            supplier: data.supplier,
+            supplier:
+              data.supplier,
           }),
 
           ...(data.entryDate !==
@@ -402,10 +538,14 @@ class DeviceService {
         },
       });
 
-    return mapDevice(updatedDevice);
+    return mapDevice(
+      updatedDevice,
+    );
   }
 
-  async delete(deviceId: string) {
+  async delete(
+    deviceId: string,
+  ) {
     const device =
       await prisma.device.findUnique({
         where: {

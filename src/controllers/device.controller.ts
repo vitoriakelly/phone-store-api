@@ -28,8 +28,10 @@ class DeviceController {
         return response.status(400).json({
           message:
             'Os dados enviados são inválidos.',
+
           errors:
-            validation.error.flatten()
+            validation.error
+              .flatten()
               .fieldErrors,
         });
       }
@@ -42,6 +44,7 @@ class DeviceController {
       return response.status(201).json({
         message:
           'Dispositivo cadastrado com sucesso.',
+
         data: device,
       });
     } catch (error) {
@@ -64,23 +67,26 @@ class DeviceController {
         return response.status(400).json({
           message:
             'Os filtros enviados são inválidos.',
+
           errors:
-            validation.error.flatten()
+            validation.error
+              .flatten()
               .fieldErrors,
         });
       }
 
-      const devices =
+      const result =
         await deviceService.list(
           validation.data,
         );
 
-      return response.status(200).json({
-        data: devices,
-        meta: {
-          total: devices.length,
-        },
-      });
+      /*
+       * O service já devolve data,
+       * paginação e filtros aplicados.
+       */
+      return response
+        .status(200)
+        .json(result);
     } catch (error) {
       return next(error);
     }
@@ -101,8 +107,10 @@ class DeviceController {
         return response.status(400).json({
           message:
             'O identificador enviado é inválido.',
+
           errors:
-            validation.error.flatten()
+            validation.error
+              .flatten()
               .fieldErrors,
         });
       }
@@ -135,8 +143,10 @@ class DeviceController {
         return response.status(400).json({
           message:
             'O identificador enviado é inválido.',
+
           errors:
-            paramsValidation.error.flatten()
+            paramsValidation.error
+              .flatten()
               .fieldErrors,
         });
       }
@@ -150,11 +160,15 @@ class DeviceController {
         return response.status(400).json({
           message:
             'Os dados enviados são inválidos.',
+
           errors:
-            bodyValidation.error.flatten()
+            bodyValidation.error
+              .flatten()
               .fieldErrors,
+
           formErrors:
-            bodyValidation.error.flatten()
+            bodyValidation.error
+              .flatten()
               .formErrors,
         });
       }
@@ -168,6 +182,7 @@ class DeviceController {
       return response.status(200).json({
         message:
           'Dispositivo atualizado com sucesso.',
+
         data: device,
       });
     } catch (error) {
@@ -190,8 +205,10 @@ class DeviceController {
         return response.status(400).json({
           message:
             'O identificador enviado é inválido.',
+
           errors:
-            validation.error.flatten()
+            validation.error
+              .flatten()
               .fieldErrors,
         });
       }
@@ -200,7 +217,9 @@ class DeviceController {
         validation.data.id,
       );
 
-      return response.status(204).send();
+      return response
+        .status(204)
+        .send();
     } catch (error) {
       return next(error);
     }

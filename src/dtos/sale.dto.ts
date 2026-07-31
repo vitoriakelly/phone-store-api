@@ -15,6 +15,12 @@ export const commissionTypeSchema = z.enum([
   'FIXED',
 ]);
 
+export const saleDeviceConditionSchema = z.enum([
+  'NOVO',
+  'SEMINOVO',
+  'USADO',
+]);
+
 const dateSchema = z
   .string({
     message: 'Informe a data.',
@@ -766,25 +772,67 @@ export const createSaleSchema = z
   });
 
 export const listSalesQuerySchema =
-  z.object({
-    search: z
-      .string()
-      .trim()
-      .max(
-        160,
-        'A pesquisa deve possuir no máximo 160 caracteres.',
-      )
-      .optional(),
+  z
+    .object({
+      page: z.coerce
+        .number({
+          message:
+            'A página deve ser um número.',
+        })
+        .int(
+          'A página deve ser um número inteiro.',
+        )
+        .min(
+          1,
+          'A página deve ser maior ou igual a 1.',
+        )
+        .default(1),
 
-    paymentMethod:
-      paymentMethodSchema.optional(),
-    sellerId: z
-      .string()
-      .uuid(
-        'O identificador do vendedor é inválido.',
-      )
-      .optional(),
-  });
+      search: z
+        .string()
+        .trim()
+        .max(
+          160,
+          'A pesquisa deve possuir no máximo 160 caracteres.',
+        )
+        .optional(),
+
+      paymentMethod:
+        paymentMethodSchema.optional(),
+
+      deviceCondition:
+        saleDeviceConditionSchema.optional(),
+
+      sellerId: z
+        .string()
+        .uuid(
+          'O identificador do vendedor é inválido.',
+        )
+        .optional(),
+
+      startDate:
+        dateSchema.optional(),
+
+      endDate:
+        dateSchema.optional(),
+    })
+    .superRefine(
+      (data, context) => {
+        if (
+          data.startDate &&
+          data.endDate &&
+          data.startDate >
+            data.endDate
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['endDate'],
+            message:
+              'A data final não pode ser anterior à data inicial.',
+          });
+        }
+      },
+    );
 
 export const saleParamsSchema =
   z.object({

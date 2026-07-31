@@ -36,6 +36,35 @@ function formatCurrency(
   });
 }
 
+const SALES_PAGE_SIZE = 10;
+
+function getStartOfDay(
+  date: string,
+) {
+  return new Date(
+    `${date}T00:00:00.000Z`,
+  );
+}
+
+function getEndOfDay(
+  date: string,
+) {
+  return new Date(
+    `${date}T23:59:59.999Z`,
+  );
+}
+
+function roundCurrency(
+  value: number,
+) {
+  return (
+    Math.round(
+      (value + Number.EPSILON) *
+        100,
+    ) / 100
+  );
+}
+
 function nullableText(
   value: string | null | undefined,
 ) {
@@ -983,6 +1012,34 @@ class SaleService {
         query.sellerId;
     }
 
+    if (query.deviceCondition) {
+      where.deviceCondition =
+        query.deviceCondition;
+    }
+
+    if (
+      query.startDate ||
+      query.endDate
+    ) {
+      where.soldAt = {
+        ...(query.startDate
+          ? {
+              gte: getStartOfDay(
+                query.startDate,
+              ),
+            }
+          : {}),
+
+        ...(query.endDate
+          ? {
+              lte: getEndOfDay(
+                query.endDate,
+              ),
+            }
+          : {}),
+      };
+    }
+
     if (query.search) {
       where.OR = [
         {
@@ -1043,9 +1100,19 @@ class SaleService {
       ];
     }
 
-    const sales =
-      await prisma.sale.findMany({
+    const skip =
+      (query.page - 1) *
+      SALES_PAGE_SIZE;
+
+    const [
+      sales,
+      total,
+      aggregate,
+    ] = await Promise.all([
+      prisma.sale.findMany({
         where,
+        skip,
+        take: SALES_PAGE_SIZE,
 
         include: {
           tradeInDevice: true,
@@ -1070,59 +1137,112 @@ class SaleService {
             createdAt: 'desc',
           },
         ],
-      });
+      }),
 
-    const mappedSales =
-      sales.map(mapSale);
+      /*
+       * Total de registros encontrados
+       * considerando todos os filtros.
+       */
+      prisma.sale.count({
+        where,
+      }),
+
+      /*
+       * Os cards financeiros consideram
+       * todos os registros filtrados, e não
+       * somente os 10 itens da página.
+       */
+      prisma.sale.aggregate({
+        where,
+
+        _sum: {
+          salePrice: true,
+          purchasePrice: true,
+          commissionAmount: true,
+        },
+      }),
+    ]);
 
     const totalRevenue =
-      mappedSales.reduce(
-        (total, sale) =>
-          total +
-          sale.salePrice,
-        0,
+      Number(
+        aggregate._sum
+          .salePrice ?? 0,
       );
 
-    const totalProfit =
-      mappedSales.reduce(
-        (total, sale) =>
-          total +
-          (sale.salePrice -
-            sale.purchasePrice),
-        0,
+    const totalCost =
+      Number(
+        aggregate._sum
+          .purchasePrice ?? 0,
       );
 
     const totalCommission =
-      mappedSales.reduce(
-        (total, sale) =>
-          total +
-          sale.commissionAmount,
-        0,
+      Number(
+        aggregate._sum
+          .commissionAmount ?? 0,
       );
+
+    const totalProfit =
+      totalRevenue -
+      totalCost;
 
     const totalProfitAfterCommission =
-      mappedSales.reduce(
-        (total, sale) =>
-          total +
-          (sale.salePrice -
-            sale.purchasePrice -
-            sale.commissionAmount),
-        0,
-      );
+      totalProfit -
+      totalCommission;
+
+    const totalPages =
+      total === 0
+        ? 0
+        : Math.ceil(
+            total /
+              SALES_PAGE_SIZE,
+          );
 
     return {
-      data: mappedSales,
+      data: sales.map(mapSale),
 
       meta: {
-        total:
-          mappedSales.length,
+        page: query.page,
+        pageSize:
+          SALES_PAGE_SIZE,
+        total,
+        totalPages,
 
-        totalRevenue,
+        hasPreviousPage:
+          query.page > 1,
 
-        totalProfit,
-        totalCommission,
-        totalProfitAfterCommission,
+        hasNextPage:
+          query.page <
+          totalPages,
+
+        totalRevenue:
+          roundCurrency(
+            totalRevenue,
+          ),
+
+        totalProfit:
+          roundCurrency(
+            totalProfit,
+          ),
+
+        totalCommission:
+          roundCurrency(
+            totalCommission,
+          ),
+
+        totalProfitAfterCommission:
+          roundCurrency(
+            totalProfitAfterCommission,
+          ),
+
+        averageTicket:
+          roundCurrency(
+            total > 0
+              ? totalRevenue / total
+              : 0,
+          ),
       },
+
+      filters: query,
     };
   }
 
