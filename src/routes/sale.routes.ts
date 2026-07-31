@@ -14,6 +14,11 @@ saleRoutes.post(
   saleController.create,
 );
 
+saleRoutes.patch(
+  '/:id/commission-status',
+  saleController.updateCommissionPaymentStatus,
+);
+
 saleRoutes.get(
   '/:id',
   saleController.findById,

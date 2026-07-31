@@ -8,6 +8,7 @@ import {
   createSaleSchema,
   listSalesQuerySchema,
   saleParamsSchema,
+  updateCommissionPaymentStatusSchema,
 } from '../dtos/sale.dto.js';
 import { saleService } from '../services/sale.service.js';
 
@@ -38,13 +39,15 @@ class SaleController {
         });
       }
 
-      const sale = await saleService.create(
-        validation.data,
-      );
+      const sale =
+        await saleService.create(
+          validation.data,
+        );
 
       return response.status(201).json({
         message:
           'Venda registrada com sucesso.',
+
         data: sale,
       });
     } catch (error) {
@@ -74,9 +77,10 @@ class SaleController {
         });
       }
 
-      const result = await saleService.list(
-        validation.data,
-      );
+      const result =
+        await saleService.list(
+          validation.data,
+        );
 
       return response
         .status(200)
@@ -85,6 +89,68 @@ class SaleController {
       return next(error);
     }
   };
+
+  updateCommissionPaymentStatus =
+    async (
+      request: Request,
+      response: Response,
+      next: NextFunction,
+    ) => {
+      try {
+        const paramsValidation =
+          saleParamsSchema.safeParse(
+            request.params,
+          );
+
+        if (!paramsValidation.success) {
+          return response.status(400).json({
+            message:
+              'O identificador enviado é inválido.',
+
+            errors:
+              paramsValidation.error
+                .flatten()
+                .fieldErrors,
+          });
+        }
+
+        const bodyValidation =
+          updateCommissionPaymentStatusSchema.safeParse(
+            request.body,
+          );
+
+        if (!bodyValidation.success) {
+          return response.status(400).json({
+            message:
+              'O status enviado é inválido.',
+
+            errors:
+              bodyValidation.error
+                .flatten()
+                .fieldErrors,
+          });
+        }
+
+        const sale =
+          await saleService
+            .updateCommissionPaymentStatus(
+              paramsValidation.data.id,
+              bodyValidation.data,
+            );
+
+        return response.status(200).json({
+          message:
+            bodyValidation.data.status ===
+            'PAID'
+              ? 'Comissão marcada como paga.'
+              : 'Comissão marcada como pendente.',
+
+          data: sale,
+        });
+      } catch (error) {
+        return next(error);
+      }
+    };
 
   findById = async (
     request: Request,

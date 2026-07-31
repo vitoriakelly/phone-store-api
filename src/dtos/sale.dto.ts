@@ -15,6 +15,11 @@ export const commissionTypeSchema = z.enum([
   'FIXED',
 ]);
 
+export const commissionPaymentStatusSchema = z.enum([
+  'PENDING',
+  'PAID',
+]);
+
 export const saleDeviceConditionSchema = z.enum([
   'NOVO',
   'SEMINOVO',
@@ -834,6 +839,12 @@ export const listSalesQuerySchema =
       },
     );
 
+export const updateCommissionPaymentStatusSchema =
+  z.object({
+    status:
+      commissionPaymentStatusSchema,
+  });
+
 export const saleParamsSchema =
   z.object({
     id: z
@@ -847,6 +858,12 @@ export type CreateSaleDTO =
   z.infer<
     typeof createSaleSchema
   >;
+
+export type UpdateCommissionPaymentStatusDTO =
+  z.infer<
+    typeof updateCommissionPaymentStatusSchema
+  >;
+
 
 export type CreateSalePaymentDTO =
   z.infer<

@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma.js';
 import type {
   CreateSaleDTO,
   ListSalesQueryDTO,
+  UpdateCommissionPaymentStatusDTO,
 } from '../dtos/sale.dto.js';
 import { AppError } from '../errors/app-error.js';
 import {
@@ -195,6 +196,14 @@ function mapSale(
     commissionAmount: Number(
       sale.commissionAmount,
     ),
+
+    commissionPaymentStatus:
+      sale.commissionPaymentStatus,
+
+    commissionPaidAt:
+      sale.commissionPaidAt
+        ? sale.commissionPaidAt.toISOString()
+        : null,
 
     customerName: sale.customerName,
 
@@ -1244,6 +1253,75 @@ class SaleService {
 
       filters: query,
     };
+  }
+
+  async updateCommissionPaymentStatus(
+    saleId: string,
+    data: UpdateCommissionPaymentStatusDTO,
+  ) {
+    const existingSale =
+      await prisma.sale.findUnique({
+        where: {
+          id: saleId,
+        },
+
+        select: {
+          id: true,
+          commissionAmount: true,
+        },
+      });
+
+    if (!existingSale) {
+      throw new AppError(
+        'Venda não encontrada.',
+        404,
+      );
+    }
+
+    if (
+      Number(
+        existingSale.commissionAmount,
+      ) <= 0
+    ) {
+      throw new AppError(
+        'Esta venda não possui comissão para pagamento.',
+        409,
+      );
+    }
+
+    const updatedSale =
+      await prisma.sale.update({
+        where: {
+          id: saleId,
+        },
+
+        data: {
+          commissionPaymentStatus:
+            data.status,
+
+          commissionPaidAt:
+            data.status === 'PAID'
+              ? new Date()
+              : null,
+        },
+
+        include: {
+          tradeInDevice: true,
+
+          payments: {
+            orderBy: [
+              {
+                createdAt: 'asc',
+              },
+              {
+                id: 'asc',
+              },
+            ],
+          },
+        },
+      });
+
+    return mapSale(updatedSale);
   }
 
   async findById(
