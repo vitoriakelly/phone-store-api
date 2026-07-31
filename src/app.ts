@@ -11,6 +11,7 @@ import { deviceModule } from './modules/device.module.js';
 import { reportModule } from './modules/report.module.js';
 import { saleModule } from './modules/sale.module.js';
 import { userModule } from './modules/user.module.js';
+import { dashboardModule } from './modules/dashboard.module.js';
 
 const app = express();
 
@@ -123,6 +124,7 @@ app.get(
 );
 
 app.use(authModule);
+app.use(dashboardModule);
 app.use(deviceModule);
 app.use(saleModule);
 app.use(reportModule);
