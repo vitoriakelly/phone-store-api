@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "postinstall": "prisma generate",
+    "build": "prisma generate && tsc",
     "create:master": "tsx scripts/create-master.ts",
     "create:employee": "tsx scripts/create-employee.ts",
     "start": "node dist/server.js",
