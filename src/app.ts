@@ -139,3 +139,4 @@ app.use((_request, response) => {
 app.use(errorHandler);
 
 export { app };
+export default app;
