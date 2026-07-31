@@ -34,28 +34,36 @@ function getCookieMaxAge() {
 }
 
 function getAuthCookieOptions(): CookieOptions {
+  const isProduction =
+    process.env.NODE_ENV ===
+    'production';
+
   return {
     httpOnly: true,
+    secure: isProduction,
 
-    secure:
-      process.env.NODE_ENV ===
-      'production',
+    sameSite: isProduction
+      ? 'none'
+      : 'lax',
 
-    sameSite: 'lax',
     path: '/',
     maxAge: getCookieMaxAge(),
   };
 }
 
 function getClearCookieOptions(): CookieOptions {
+  const isProduction =
+    process.env.NODE_ENV ===
+    'production';
+
   return {
     httpOnly: true,
+    secure: isProduction,
 
-    secure:
-      process.env.NODE_ENV ===
-      'production',
+    sameSite: isProduction
+      ? 'none'
+      : 'lax',
 
-    sameSite: 'lax',
     path: '/',
   };
 }
