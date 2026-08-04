@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+
     "dev": "tsx watch src/server.ts",
     "postinstall": "prisma generate",
     "build": "prisma generate && tsc",
@@ -43,6 +45,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "prisma": "^7.9.1",
     "tsx": "^4.23.1",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "^4.1.10"
   }
 }
